@@ -9,9 +9,15 @@ import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown
 import remarkMath from 'remark-math'; // Import remark-math
 import rehypeKatex from 'rehype-katex'; // Import rehype-katex
 import 'katex/dist/katex.min.css'; // Import KaTeX CSS
-import { Paperclip, User, Bot, FileUp, BarChart2, FileText, Database } from 'lucide-react'; // Import icons
+import { Paperclip, User, Upload,Bot, FileUp, BarChart2, FileText, Database } from 'lucide-react'; // Import icons
 // Import the Supabase client
 import { supabase } from '@/lib/supabaseClient';
+
+// Helper function to generate catalog name (extracted for reuse)
+const generateCatalogNameFromFile = (file) => {
+    if (!file) return `catalog_${Date.now()}`;
+    return file.name.split('.').slice(0, -1).join('.') || `file_${Date.now()}`;
+};
 
 export const ChatWindow = forwardRef((props, ref) => {
     const { initialMessages = [], catalog = 'default', clientName = 'Selected Catalog', availableCatalogs = [], onFileUpload } = props;
@@ -20,14 +26,12 @@ export const ChatWindow = forwardRef((props, ref) => {
     const [retrievedContextRows, setRetrievedContextRows] = useState([]);
     const [lastFunctionCall, setLastFunctionCall] = useState(null);
     const [lastFunctionResult, setLastFunctionResult] = useState(null);
-    const [activePanelTab, setActivePanelTab] = useState('analysis');
+    const [activePanelTab, setActivePanelTab] = useState('data');
     
     // --- State for File Upload Tracking ---
     const fileInputRef = useRef(null);
     const chatContainerRef = useRef(null); // Add ref for chat container
-    const [uploadedFiles, setUploadedFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
-    const [currentFileName, setCurrentFileName] = useState('');
     const [jobStatus, setJobStatus] = useState('');
     const [lastUploadError, setLastUploadError] = useState('');
     const [lastUploadSuccess, setLastUploadSuccess] = useState('');
@@ -94,144 +98,177 @@ export const ChatWindow = forwardRef((props, ref) => {
             }
         });
 
-    // Handle file upload from chat input
-    const handleFileUploadClick = () => {
-        // Switch to data tab
-        setActivePanelTab('data');
-        setTimeout(() => {
-            fileInputRef.current?.click();
-        }, 100);
-    };
-
-    // Handle file changes from the input element
-    const handleFileChange = (e) => {
+    // Handle file changes from the input element - NOW HANDLES BATCHES
+    const handleFileChange = async (e) => {
         const files = Array.from(e.target.files || []);
-        if (files.length > 0) {
-             // For now, handle only the first file
-             handleFileUpload(files[0]); 
-             // If handling multiple, you'd loop here and manage state differently
+        if (files.length === 0) {
+            return; // No files selected
         }
-         // Clear the file input value so the same file can be selected again
+
+        // Reset batch status & start loading indicator
+        setIsUploading(true);
+        setLastUploadError(null);
+        setLastUploadSuccess(null);
+        // Reset progress counters (optional, could show progress across files)
+        setProcessedCount(0);
+        setTotalCount(files.length);
+        setJobStatus('initiating_batch'); // Indicate batch start
+
+        let batchCatalog = '';
+        let isNewCatalogUpload = false;
+
+        // Determine target catalog ONCE for the batch
+        if (activePanelTab === 'data' && catalog) {
+            batchCatalog = catalog;
+            console.log(`Upload batch initiated for 'data' tab. Adding ${files.length} files to existing catalog: ${batchCatalog}`);
+        } else {
+            // Default to 'upload' behavior: create new catalog based on first file
+            batchCatalog = generateCatalogNameFromFile(files[0]);
+            isNewCatalogUpload = true;
+            console.log(`Upload batch initiated for 'upload' tab or no current catalog. Creating new catalog '${batchCatalog}' for ${files.length} files.`);
+        }
+
+        // Process files concurrently
+        const uploadPromises = files.map(file => handleFileUpload(file, batchCatalog));
+        const results = await Promise.allSettled(uploadPromises);
+
+        // Consolidate results
+        let successCount = 0;
+        let errorCount = 0;
+        const errors = [];
+
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                successCount++;
+                console.log(`File ${index + 1} ('${files[index].name}') upload succeeded (queued).`);
+            } else {
+                errorCount++;
+                errors.push(`File '${files[index].name}': ${result.reason?.message || 'Unknown error'}`);
+                console.error(`File ${index + 1} ('${files[index].name}') upload failed:`, result.reason);
+            }
+        });
+
+        // Update UI based on batch outcome
+        if (errorCount > 0) {
+            setLastUploadError(`${errorCount} of ${files.length} files failed to upload. Errors: ${errors.slice(0, 2).join(', ')}${errors.length > 2 ? '...' : ''}`);
+        }
+        if (successCount > 0) {
+            setLastUploadSuccess(`${successCount} of ${files.length} files successfully uploaded to catalog \"${batchCatalog}\" and queued for processing.`);
+            // Notify parent about the new catalog only if it was an 'upload' tab action and at least one file succeeded
+            if (isNewCatalogUpload && onFileUpload) {
+                 onFileUpload(batchCatalog);
+            }
+        }
+
+        setIsUploading(false);
+        setJobStatus(errorCount > 0 ? 'batch_error' : 'batch_queued'); // Final batch status
+
+         // Clear the file input value so the same files can be selected again if needed
          if (fileInputRef.current) {
             fileInputRef.current.value = "";
          }
     };
 
-    // Renamed from handleFileUpload in previous steps, now the main upload handler
-    const handleFileUpload = async (file) => {
-        if (!supabase) {
-            setLastUploadError('Error: Supabase client not available.');
-            return; // Exit early
-        }
-        if (!file) {
-            setLastUploadError('Error: No file provided to upload function.');
-            return; // Exit early
-        }
-        
-        // Reset state at the START of a new upload attempt
-        setIsUploading(true);
-        setLastUploadError(null);
-        setLastUploadSuccess(null);
-        setActiveJobId(null); 
-        setJobStatus('initiating'); // New initial status
-        setProcessedCount(0);
-        setTotalCount(0);
-        setJobErrorMessage(null);
-        setCurrentFileName(file.name); // Set current file name
-    
-        let insertedFileId = null; 
-    
-        try {
-          setJobStatus('pending_db');
-          
-          // Derive catalog name (ensure this logic is robust)
-          const baseFileName = file.name.split('.').slice(0, -1).join('.') || `file_${Date.now()}`;
-          const catalogName = `${baseFileName}`; // Use base name as catalog, adjust if needed
-          
-          const fileInsertData = {
-              name: file.name, // Store original filename in 'files' table
-              mime_type: file.type || 'application/octet-stream', 
-              catalog: catalogName,  
-              doc_type: docType, // docType state from component     
-          };
-    
-          console.log("Inserting file record:", fileInsertData);
-          // ... (rest of the try block: insert into files, get signed URL, upload to storage) ...
-          // MAKE SURE this logic matches the original handleFileUpload 
-          // (I'm assuming it was correct based on terminal logs showing signed URL call)
-           const { data: fileRecord, error: insertError } = await supabase
-               .from('files')
-               .insert(fileInsertData)
-               .select('id')
-               .single();
+    // Main upload handler - NOW ACCEPTS targetCatalog and returns Promise
+    const handleFileUpload = async (file, targetCatalog) => {
+       // Removed internal state updates for isUploading, lastUploadSuccess, lastUploadError
+       // Removed internal logic to determine catalog name
 
-          if (insertError) throw new Error(`Failed to create file record: ${insertError.message}`);
-          if (!fileRecord || !fileRecord.id) throw new Error('Failed to get ID back from file record insertion.');
+        return new Promise(async (resolve, reject) => {
+             if (!supabase) {
+                 return reject(new Error('Supabase client not available.'));
+             }
+             if (!file) {
+                 return reject(new Error('No file provided to upload function.'));
+             }
+             if (!targetCatalog) {
+                 return reject(new Error('No target catalog determined for upload.'));
+             }
 
-          insertedFileId = fileRecord.id;
-          console.log(`File record created successfully with ID: ${insertedFileId}`);
-          setJobStatus('requesting_url');
+             // Individual file state tracking (optional, for detailed progress)
+             // We might need a different way to track this per-file if needed for UI
+             // For now, focus on Promise resolve/reject for batch handling
+             // setJobStatus('initiating_single'); // Example per-file status
+             // setCurrentFileName(file.name);
 
-          const signedUrlResponse = await fetch('/api/storage/signed-url', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filename: file.name, file_id: insertedFileId }), // Pass file_id
-          });
+             let insertedFileId = null;
 
-          if (!signedUrlResponse.ok) {
-              const errorData = await signedUrlResponse.json();
-              throw new Error(`Failed to get signed URL: ${errorData.error || signedUrlResponse.statusText}`);
-          }
+             try {
+                 // setJobStatus('pending_db_single');
+                 const fileInsertData = {
+                     name: file.name,
+                     mime_type: file.type || 'application/octet-stream',
+                     catalog: targetCatalog,
+                     doc_type: docType,
+                 };
 
-          const { signedUrl, path } = await signedUrlResponse.json();
-          console.log(`Received signed URL for path: ${path}`);
-          setJobStatus('uploading');
+                 console.log(`Inserting file record for ${file.name} into catalog ${targetCatalog}:`, fileInsertData);
 
-          const uploadResponse = await fetch(signedUrl, {
-              method: 'PUT',
-              body: file,
-              headers: { 'Content-Type': file.type || 'application/octet-stream' },
-          });
+                 const { data: fileRecord, error: insertError } = await supabase
+                     .from('files')
+                     .insert(fileInsertData)
+                     .select('id')
+                     .single();
 
-          if (!uploadResponse.ok) {
-              let errorDetail = uploadResponse.statusText;
-              try {
-                  const xmlError = await uploadResponse.text(); 
-                  console.error('Direct upload failed response:', xmlError);
-                  const messageMatch = xmlError.match(/<Message>(.*?)<\/Message>/);
-                  if (messageMatch && messageMatch[1]) errorDetail = messageMatch[1];
-              } catch (parseError) { /* Ignore */ }
-              throw new Error(`Direct file upload failed: ${uploadResponse.status} ${errorDetail}`);
-          }
+                 if (insertError) throw new Error(`DB insert failed: ${insertError.message}`);
+                 if (!fileRecord || !fileRecord.id) throw new Error('DB insert failed to return ID.');
 
-          console.log('File upload complete via UI. Waiting for backend processing job queue...');
-          setJobStatus('queued'); // Set status to queued, backend webhook handles the rest
-          setLastUploadSuccess(`File "${file.name}" uploaded. Processing queued.`);
-          // We don't poll here anymore, the webhook triggers the worker
+                 insertedFileId = fileRecord.id;
+                 console.log(`File record created for ${file.name} with ID: ${insertedFileId}`);
+                 // setJobStatus('requesting_url_single');
 
-        } catch (error) {
-           // ... (existing error handling) ...
-           console.error('handleFileUpload error:', error);
-           setLastUploadError(error.message || 'An unexpected error occurred during upload.');
-           setJobStatus('error');
-           if (insertedFileId) {
-              try {
-                  console.log(`Updating file ${insertedFileId} status to error in DB...`);
-                  await supabase.from('files').update({ status: 'error', error_message: String(error.message || 'Unknown error').substring(0, 250) }).eq('id', insertedFileId);
-              } catch (dbError) {
-                  console.error("Failed to update file status to error in DB:", dbError);
-              }
-           }
-        } finally {
-             // Only set uploading to false once the final state (queued, error, or completed via polling if added) is reached
-             // For now, let's set it false once it's queued or errored.
-             if (jobStatus === 'queued' || jobStatus === 'error') {
-                setIsUploading(false);
-             } 
-             // A more robust solution would involve polling the job status via the activeJobId
-             // and setting isUploading=false only on 'completed' or 'failed'.
-        }
-      };
+                 const signedUrlResponse = await fetch('/api/storage/signed-url', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ filename: file.name, file_id: insertedFileId }),
+                 });
+
+                 if (!signedUrlResponse.ok) {
+                     const errorData = await signedUrlResponse.json();
+                     throw new Error(`Signed URL fetch failed: ${errorData.error || signedUrlResponse.statusText}`);
+                 }
+
+                 const { signedUrl, path } = await signedUrlResponse.json();
+                 console.log(`Received signed URL for ${file.name}, path: ${path}`);
+                 // setJobStatus('uploading_single');
+
+                 const uploadResponse = await fetch(signedUrl, {
+                     method: 'PUT',
+                     body: file,
+                     headers: { 'Content-Type': file.type || 'application/octet-stream' },
+                 });
+
+                 if (!uploadResponse.ok) {
+                     let errorDetail = uploadResponse.statusText;
+                     try {
+                         const xmlError = await uploadResponse.text();
+                         console.error(`Direct upload failed response for ${file.name}:`, xmlError);
+                         const messageMatch = xmlError.match(/<Message>(.*?)<\/Message>/);
+                         if (messageMatch && messageMatch[1]) errorDetail = messageMatch[1];
+                     } catch (parseError) { /* Ignore */ }
+                     throw new Error(`Storage upload failed: ${uploadResponse.status} ${errorDetail}`);
+                 }
+
+                 console.log(`File ${file.name} upload complete via UI. Queued for processing.`);
+                 // setJobStatus('queued_single');
+                 resolve({ fileId: insertedFileId, fileName: file.name }); // Resolve on success
+
+             } catch (error) {
+                 console.error(`handleFileUpload error for ${file.name}:`, error);
+                 // Attempt to mark the file as error in DB even if part of the process failed
+                 if (insertedFileId) {
+                     try {
+                         console.warn(`Updating file ${insertedFileId} (${file.name}) status to error in DB due to upload failure...`);
+                         await supabase.from('files').update({ status: 'error', error_message: String(error.message || 'Unknown upload error').substring(0, 250) }).eq('id', insertedFileId);
+                     } catch (dbError) {
+                         console.error(`Failed to update file status to error in DB for ${insertedFileId} (${file.name}):`, dbError);
+                     }
+                 }
+                 reject(error); // Reject on error
+             }
+             // No 'finally' block needed here as Promise handles completion
+         });
+       };
 
     // Expose data for export using useChat state
     useImperativeHandle(ref, () => ({
@@ -294,13 +331,16 @@ export const ChatWindow = forwardRef((props, ref) => {
                     <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                         <Database size={40} className="text-gray-400 mb-4" />
                         <h3 className="text-lg font-medium text-gray-700 mb-2">No Catalog Selected</h3>
-                        <p className="text-sm text-gray-500 mb-4">Upload a data file to get started or select an existing catalog if available.</p>
+                        <p className="text-sm text-gray-500 mb-4">Upload a data file to create a new catalog or select an existing one.</p>
                         <Button 
-                            onClick={handleFileUploadClick} 
+                            onClick={() => {
+                                setActivePanelTab('upload'); // Switch to upload tab for initial upload
+                                setTimeout(() => fileInputRef.current?.click(), 50); // Give state time to update before click
+                            }}
                             variant="default"
                             className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
-                            <FileUp size={16} className="mr-2" /> Upload Data File
+                            <FileUp size={16} className="mr-2" /> Upload New Data File
                         </Button>
                         {/* Hidden file input remains */}
                         <input 
@@ -310,11 +350,12 @@ export const ChatWindow = forwardRef((props, ref) => {
                            style={{ display: 'none' }} 
                            multiple 
                         />
-                        {/* Display upload status if uploading from here */}
+                        {/* Display BATCH upload status */}
                          {isUploading && (
                             <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                                <span>Uploading {currentFileName}... Status: {jobStatus}</span>
+                                <span>Uploading {totalCount} files...</span>
+                                {/* Could add progress: <span>{processedCount}/{totalCount}</span> */}
                             </div>
                         )}
                         {lastUploadError && <div className="mt-4 text-sm text-red-500">Error: {lastUploadError}</div>}
@@ -388,10 +429,14 @@ export const ChatWindow = forwardRef((props, ref) => {
                             {/* Button to trigger the SAME file input used by the empty state */}
                             <Button 
                                 type="button" 
-                                onClick={handleFileUploadClick} 
+                                onClick={() => {
+                                     // Default attachment button should add to current catalog
+                                     setActivePanelTab('data');
+                                     setTimeout(() => fileInputRef.current?.click(), 50);
+                                 }}
                                 variant="outline" 
                                 className="h-10 w-10 p-2"
-                                title="Upload file"
+                                title="Add file to current catalog"
                             >
                                 <FileUp size={18} />
                             </Button>
@@ -420,157 +465,131 @@ export const ChatWindow = forwardRef((props, ref) => {
             <div className="w-1/3 h-full flex flex-col">
                 {/* Tab navigation */}
                 <div className="flex border-b">
-                    <button
-                        className={`px-4 py-2 text-sm font-medium ${activePanelTab === 'analysis' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setActivePanelTab('analysis')}
-                    >
-                        <BarChart2 size={16} className="inline mr-1" /> Analysis
-                    </button>
-                    <button
-                        className={`px-4 py-2 text-sm font-medium ${activePanelTab === 'context' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        onClick={() => setActivePanelTab('context')}
-                    >
-                        <FileText size={16} className="inline mr-1" /> Context
-                    </button>
+                    {/* Removed Analysis/Context tabs for now */} 
                     <button
                         className={`px-4 py-2 text-sm font-medium ${activePanelTab === 'data' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                         onClick={() => setActivePanelTab('data')}
                     >
                         <Database size={16} className="inline mr-1" /> Data
                     </button>
+                    <button
+                        className={`px-4 py-2 text-sm font-medium ${activePanelTab === 'upload' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        onClick={() => setActivePanelTab('upload')}
+                    >
+                        <Upload size={16} className="inline mr-1" /> Upload New
+                    </button>
                 </div>
 
                 {/* Panel content */}
                 <div className="flex-grow overflow-y-auto p-4 bg-gray-50 rounded-b-lg">
-                    {activePanelTab === 'analysis' && (
-                        <div className="space-y-4">
-                            <div className="bg-white border rounded-lg p-4">
-                                <h3 className="text-sm font-medium mb-3">Query Analysis</h3>
-                                <dl className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <dt className="text-gray-500">Tool Call:</dt>
-                                        <dd className="font-medium text-right whitespace-pre-wrap">{lastFunctionCall || 'N/A'}</dd>
-                                    </div>
-                                    {lastFunctionResult && (
-                                        <div className="flex flex-col pt-2">
-                                            <dt className="text-gray-500 mb-1">Tool Result:</dt>
-                                            <dd className="font-mono text-xs bg-gray-100 p-2 rounded overflow-x-auto">
-                                                {lastFunctionResult} 
-                                            </dd>
-                                        </div>
-                                    )}
-                                </dl>
-                            </div>
-                        </div>
-                    )}
+                    
 
-                    {activePanelTab === 'context' && (
-                        <div>
-                            <h3 className="text-sm font-medium mb-2">Retrieved Context</h3>
-                            {retrievedContextRows.length > 0 ? (
-                                <div className="space-y-2">
-                                    {retrievedContextRows.map((row, i) => (
-                                        <div key={i} className="p-2 bg-white border rounded text-xs">
-                                            <div className="font-medium">Row ID: {row.id || i+1}</div>
-                                            <div className="mt-1 text-gray-700 line-clamp-3">
-                                                {row.content || "Content not available"}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-gray-500 text-sm">No context retrieved yet. Ask a question to see relevant data.</div>
-                            )}
-                        </div>
-                    )}
+                   
 
                     {activePanelTab === 'data' && (
                         <div className="space-y-4">
                             {/* Current data source info */}
                             <div className="bg-white border rounded-lg p-4">
-                                <h3 className="text-sm font-medium mb-3">Data Source</h3>
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-gray-500">Catalog:</span>
-                                    <span className="font-medium text-blue-600">{clientName || catalog}</span>
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                    {lastFunctionCall ? (
-                                        <div>
-                                            <div className="mb-1">Function Called:</div>
-                                            <pre className="bg-gray-100 p-2 rounded overflow-x-auto text-xs">
-                                                {lastFunctionCall}
-                                            </pre>
-                                        </div>
-                                    ) : (
-                                        <div>Using general context retrieval</div>
-                                    )}
+                                <h3 className="text-sm font-medium mb-2">Current Data Source</h3>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-gray-500 text-xs">Catalog:</span>
+                                    <span className="font-medium text-blue-600 text-sm truncate">{clientName || catalog || 'N/A'}</span>
                                 </div>
                             </div>
 
-                            {/* Upload interface */}
+                            {/* Upload interface for adding to current catalog */} 
                             <div className="bg-white border rounded-lg p-4">
-                                <h3 className="text-sm font-medium mb-3">Upload Files</h3>
-                                <div className="space-y-4">
-                                    {/* File type selector */}
-                                    <div className="space-y-2">
-                                        <span className="text-xs font-medium">File Type</span>
-                                        <div className="flex flex-wrap gap-2">
-                                            <span className="px-2 py-1 text-xs bg-blue-500 text-white rounded">
-                                                Financial Statements
-                                            </span>
-                                            <span className="px-2 py-1 text-xs border border-gray-300 rounded">
-                                                Royalty Reports
-                                            </span>
-                                            <span className="px-2 py-1 text-xs border border-gray-300 rounded">
-                                                Custom Data
-                                            </span>
-                                        </div>
+                                <h3 className="text-sm font-medium mb-3">Add Data to '{clientName || catalog || 'N/A'}'</h3>
+                                {/* File type selector (kept static for now) */} 
+                                <div className="space-y-2 mb-4">
+                                    <span className="text-xs font-medium">File Type</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Add onClick handlers here later if needed */} 
+                                        <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'evaluation' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('evaluation')}>
+                                            Financial Statements
+                                        </span>
+                                        <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'royalty' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('royalty')}>
+                                            Royalty Reports
+                                        </span>
+                                        <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'custom' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('custom')}>
+                                            Custom Data
+                                        </span>
                                     </div>
-
-                                    {/* Dropzone */}
-                                    <div
-                                        className="border-2 border-dashed rounded-md p-6 text-center border-gray-300"
-                                        onClick={() => fileInputRef.current?.click()}
-                                    >
-                                        <div className="flex flex-col items-center">
-                                            <FileUp className="h-8 w-8 text-gray-400 mb-2" />
-                                            <p className="text-sm font-medium">Drag & drop files here or click to browse</p>
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Supports Excel, CSV, PDF files up to 10MB
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Uploaded files list */}
-                                    {uploadedFiles.length > 0 && (
-                                        <div className="space-y-2">
-                                            <span className="text-xs font-medium">Uploaded Files</span>
-                                            <div className="space-y-2 max-h-[150px] overflow-y-auto">
-                                                {uploadedFiles.map((file, index) => (
-                                                    <div key={index} className="bg-white border rounded-md p-2 text-xs flex flex-col">
-                                                        <div className="font-medium truncate">{file.name}</div>
-                                                        <div className="text-gray-500 text-[10px]">
-                                                            {formatFileSize(file.size)}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <div className="text-xs text-green-500">{uploadedFiles.length} files uploaded</div>
-                                        </div>
-                                    )}
                                 </div>
+                                {/* Dropzone for 'data' tab */} 
+                                <div
+                                    className="border-2 border-dashed rounded-md p-6 text-center border-gray-300 cursor-pointer hover:border-blue-400"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <div className="flex flex-col items-center">
+                                        <FileUp className="h-8 w-8 text-gray-400 mb-2" />
+                                        <p className="text-sm font-medium">Click or drop files here to add</p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Supports Excel, CSV, PDF (max 10MB)
+                                        </p>
+                                    </div>
+                                </div>
+                                {/* Shared BATCH Upload Status Display */}
+                                {isUploading && (
+                                   <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
+                                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                       <span>Uploading {totalCount} files...</span>
+                                   </div>
+                                )}
+                                {lastUploadError && <div className="mt-4 text-sm text-red-500">Error: {lastUploadError}</div>}
+                                {lastUploadSuccess && <div className="mt-4 text-sm text-green-500">{lastUploadSuccess}</div>}
                             </div>
                         </div>
                     )}
-                </div>
-                
-                {/* Original TracePanel - now hidden but kept in case we need to reference its implementation */}
-                <div className="hidden">
-                <TracePanel 
-                        retrievedRows={retrievedContextRows}
-                        functionCall={lastFunctionCall}
-                        functionCallResult={lastFunctionResult}
-                />
+                    {activePanelTab === 'upload' && (
+                        <div className="space-y-4">
+                            {/* No "Current Data Source" needed here */} 
+                            <div className="bg-white border rounded-lg p-4">
+                                <h3 className="text-sm font-medium mb-3">Upload New Files as Catalog</h3>
+                                <p className="text-xs text-gray-500 mb-3">
+                                    Upload one or more files. The first file's name will determine the new catalog name.
+                                </p>
+                                {/* File type selector (kept static for now) */} 
+                                <div className="space-y-2 mb-4">
+                                     <span className="text-xs font-medium">File Type</span>
+                                     <div className="flex flex-wrap gap-2">
+                                         {/* Add onClick handlers here later if needed */} 
+                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'evaluation' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('evaluation')}>
+                                             Financial Statements
+                                         </span>
+                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'royalty' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('royalty')}>
+                                             Royalty Reports
+                                         </span>
+                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'custom' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('custom')}>
+                                             Custom Data
+                                         </span>
+                                     </div>
+                                 </div>
+                                {/* Dropzone for 'upload' tab */} 
+                                <div
+                                    className="border-2 border-dashed rounded-md p-6 text-center border-gray-300 cursor-pointer hover:border-blue-400"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <div className="flex flex-col items-center">
+                                        <FileUp className="h-8 w-8 text-gray-400 mb-2" />
+                                        <p className="text-sm font-medium">Click or drop files here to upload</p>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Supports Excel, CSV, PDF (max 10MB)
+                                        </p>
+                                    </div>
+                                </div>
+                                {/* Shared BATCH Upload Status Display */}
+                                 {isUploading && (
+                                    <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                        <span>Uploading {totalCount} files...</span>
+                                    </div>
+                                 )}
+                                 {lastUploadError && <div className="mt-4 text-sm text-red-500">Error: {lastUploadError}</div>}
+                                 {lastUploadSuccess && <div className="mt-4 text-sm text-green-500">{lastUploadSuccess}</div>}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
