@@ -262,6 +262,7 @@ export const ChatWindow = forwardRef((props, ref) => {
     }, [messages]);
 
     // Effect to scroll to bottom when messages change
+    /* // Temporarily commented out to debug 'Maximum update depth exceeded' error
     useEffect(() => {
         if (chatContainerRef.current) {
             // Use setTimeout to ensure scrolling happens after DOM update
@@ -273,6 +274,7 @@ export const ChatWindow = forwardRef((props, ref) => {
             return () => clearTimeout(timer); // Cleanup timeout on unmount/re-run
         }
     }, [messages]);
+    */
 
     return (
         <div className="flex h-[500px]">
