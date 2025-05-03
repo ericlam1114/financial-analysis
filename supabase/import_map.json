@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "papaparse": "https://esm.sh/papaparse@5.4.1",
+    "exceljs": "https://esm.sh/exceljs@4.4.0",
+    "pdf-parse": "https://esm.sh/pdf-parse@1.1.1",
+    "buffer": "https://deno.land/std@0.177.0/node/buffer.ts"
+  }
+} 

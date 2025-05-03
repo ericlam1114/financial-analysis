@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+/* Add any global custom styles below */
+body {
+  /* Example: Add a subtle background pattern or color */
+} 
