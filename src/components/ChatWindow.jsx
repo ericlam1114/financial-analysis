@@ -49,13 +49,48 @@ export const ChatWindow = forwardRef((props, ref) => {
             },
              // Clear trace panel on new submission
             onNewMessageSend: () => {
-                setRetrievedContextRows([]);
+                // We clear these here AND in onFinish for robustness
                 setLastFunctionCall(null);
                 setLastFunctionResult(null);
             },
-            // Log the final message object when the stream finishes
+            // Update Analysis Panel state when the stream finishes
             onFinish: (message) => {
               console.log("useChat onFinish - final message:", message);
+              
+              // Extract tool calls from the final assistant message
+              if (message.role === 'assistant' && message.toolInvocations && message.toolInvocations.length > 0) {
+                 const calls = message.toolInvocations.map(inv => 
+                    `${inv.toolName}(${JSON.stringify(inv.args, null, 2)})`
+                 ).join('\n');
+                 console.log("Setting lastFunctionCall from onFinish:", calls);
+                 setLastFunctionCall(calls);
+              } else {
+                  // If the last message wasn't an assistant message with tool calls,
+                  // check previous messages (less ideal, but a fallback)
+                  const lastAssistantMsgWithTools = [...messages, message].reverse().find(m => m.role === 'assistant' && m.toolInvocations?.length > 0);
+                  if (lastAssistantMsgWithTools?.toolInvocations) {
+                     const calls = lastAssistantMsgWithTools.toolInvocations.map(inv => 
+                        `${inv.toolName}(${JSON.stringify(inv.args, null, 2)})`
+                     ).join('\n');
+                     console.log("Setting lastFunctionCall from onFinish (fallback search):", calls);
+                     setLastFunctionCall(calls);
+                  } else {
+                      console.log("No tool calls found in onFinish message or history.");
+                      setLastFunctionCall(null); // Explicitly clear if no tool used
+                  }
+              }
+              
+              // Extract tool results (look for message with role: 'tool')
+              // The result might be in a separate message before the final assistant message
+              const toolResultMessage = [...messages, message].reverse().find(m => m.role === 'tool');
+              if (toolResultMessage?.result) {
+                  const resultString = JSON.stringify(toolResultMessage.result, null, 2);
+                  console.log("Setting lastFunctionResult from onFinish:", resultString);
+                  setLastFunctionResult(resultString);
+              } else {
+                  console.log("No tool result message found in onFinish history.");
+                  setLastFunctionResult(null); // Explicitly clear
+              }
             }
         });
 
@@ -211,43 +246,18 @@ export const ChatWindow = forwardRef((props, ref) => {
     // Effect to potentially clear trace panel if messages are manually reset (optional)
     useEffect(() => {
         if (messages.length === initialMessages.length) {
-             setRetrievedContextRows([]);
+            // Clear here too if messages are externally reset
              setLastFunctionCall(null);
              setLastFunctionResult(null);
         }
     }, [messages, initialMessages]);
 
-    // Effect to update analysis panel when messages change
+    // Effect to update analysis panel when messages change - KEEP COMMENTED OUT
+    /* // Temporarily commented out to debug 'Maximum update depth exceeded' error
     useEffect(() => {
-        const lastUserMessageIndex = messages.findLastIndex(m => m.role === 'user');
-        if (lastUserMessageIndex === -1) return; // No user message yet
-
-        // Find the tool_calls and tool_result messages associated with the latest user interaction
-        const relevantMessages = messages.slice(lastUserMessageIndex + 1);
-        const toolCallMessage = relevantMessages.find(m => m.role === 'assistant' && m.toolInvocations?.length > 0);
-        const toolResultMessage = relevantMessages.find(m => m.role === 'tool');
-
-        if (toolCallMessage && toolCallMessage.toolInvocations) {
-            // Format the tool call information
-            const calls = toolCallMessage.toolInvocations.map(inv => 
-                `${inv.toolName}(${JSON.stringify(inv.args, null, 2)})`
-            ).join('\n');
-            setLastFunctionCall(calls);
-        } else {
-            setLastFunctionCall("Generic Query / No Tool Used");
-        }
-
-        if (toolResultMessage) {
-            setLastFunctionResult(JSON.stringify(toolResultMessage.result, null, 2)); // Assuming result is serializable
-        } else {
-            setLastFunctionResult(null); // Clear previous result if no new one
-        }
-
-        // You might want to derive other analysisData fields here too
-        // e.g., processingTime could be calculated, tokens used might be available 
-        // in a different callback or property from useChat if needed.
-
-    }, [messages]);
+        // ... previous logic ...
+    }, [data]); // Dependency changed to [data]
+    */
 
     // Format file size
     const formatFileSize = (bytes) => {
@@ -262,7 +272,7 @@ export const ChatWindow = forwardRef((props, ref) => {
     }, [messages]);
 
     // Effect to scroll to bottom when messages change
-    /* // Temporarily commented out to debug 'Maximum update depth exceeded' error
+    // Re-enabled after fixing the Analysis Panel update loop
     useEffect(() => {
         if (chatContainerRef.current) {
             // Use setTimeout to ensure scrolling happens after DOM update
@@ -274,7 +284,6 @@ export const ChatWindow = forwardRef((props, ref) => {
             return () => clearTimeout(timer); // Cleanup timeout on unmount/re-run
         }
     }, [messages]);
-    */
 
     return (
         <div className="flex h-[500px]">
