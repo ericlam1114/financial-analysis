@@ -158,10 +158,10 @@ export default function DashboardPage() {
            />
         </div>
 
-        <div className="flex space-x-2 shrink-0">
+        {/* <div className="flex space-x-2 shrink-0">
            <Button variant="outline" onClick={handleExportExcel} disabled={!selectedCatalog || isLoadingCatalogs}>Download Excel Valuation</Button>
            <Button variant="outline" onClick={handleExportMarkdown} disabled={!selectedCatalog || isLoadingCatalogs}>Download Markdown Memo</Button>
-        </div>
+        </div> */}
       </main>
     // </div>
   );

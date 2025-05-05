@@ -323,12 +323,15 @@ export const ChatWindow = forwardRef((props, ref) => {
     }, [messages]);
 
     return (
-        <div className="flex h-[500px] ">
-            {/* Chat Area */}
-            <div className="flex shadow-sm flex-col w-2/3 border rounded-lg mr-4 overflow-hidden bg-white">
+        // Make this container responsive: flex-col on small, md:flex-row on medium+
+        // Remove fixed height, add vertical spacing on small screens
+        <div className="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0 h-full">
+            {/* Chat Area: full width on small, 2/3 on medium+ */}
+            {/* Ensure chat area can shrink/grow and has min-height */}
+            <div className="flex shadow-sm flex-col w-full md:w-2/3 border rounded-lg overflow-hidden bg-white min-h-[300px] md:min-h-0 flex-grow">
                 {/* Conditional Rendering: Show Chat or Upload Prompt */}
                 {!catalog ? (
-                    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                    <div className="flex flex-col items-center justify-center h-full p-6 text-center flex-grow">
                         <Database size={40} className="text-gray-400 mb-4" />
                         <h3 className="text-lg font-medium text-gray-700 mb-2">No Catalog Selected</h3>
                         <p className="text-sm text-gray-500 mb-4">Upload a data file to create a new catalog or select an existing one.</p>
@@ -418,7 +421,7 @@ export const ChatWindow = forwardRef((props, ref) => {
                                 </div>
                             )}
                         </div>
-                        {/* Chat Input Form */}
+                        {/* Chat Input Form: Ensure it doesn't shrink */}
                         <form
                             onSubmit={(e) => {
                                 handleSubmit(e, { body: { catalog: catalog, client_name: clientName } });
@@ -460,10 +463,11 @@ export const ChatWindow = forwardRef((props, ref) => {
                 )}
             </div>
 
-            {/* Enhanced Analysis Panel Area */}
-            <div className="w-1/3 h-full flex flex-col">
+            {/* Enhanced Analysis Panel Area: full width on small, 1/3 on medium+ */}
+            {/* Ensure panel area can shrink/grow */}
+            <div className="w-full md:w-1/3 h-full flex flex-col min-h-[300px] md:min-h-0 flex-grow">
                 {/* Tab navigation */}
-                <div className="flex border-b">
+                <div className="flex border-b shrink-0">
                     {/* Removed Analysis/Context tabs for now */}
                     <button
                         className={`px-4 py-2 text-sm font-medium ${activePanelTab === 'data' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -481,10 +485,6 @@ export const ChatWindow = forwardRef((props, ref) => {
 
                 {/* Panel content */}
                 <div className="flex-grow overflow-y-auto p-4 bg-gray-50 rounded-b-lg">
-
-
-
-
                     {activePanelTab === 'data' && (
                         <div className="space-y-4">
                             {/* Current data source info */}
