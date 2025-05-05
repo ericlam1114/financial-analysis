@@ -691,7 +691,7 @@ export const functionTools = [
     }
   }),
   tool({
-    description: 'Fetches yearly financial summary data (specifically \'amount_collected\' unless another metric is requested) and provides period context. **Crucially, use the exact \'total_sum\' value and explicitly state the \'period_type\' (FullYear, YTD, PartialYear) returned by this tool in your response.** This tool MUST be used before answering any questions about maturity, growth trends, evergreen status, or revenue cliffs.',
+    description: 'Fetches yearly financial summary data using the **numerical Catalog ID** for the \`catalog_filter\` parameter (e.g., \'100047\'). Summarizes \'amount_collected\' unless another metric is requested. **Crucially, use the exact \'total_sum\' value and explicitly state the \'period_type\' (FullYear, YTD, PartialYear) returned by this tool in your response.** Required for analyzing trends, maturity, etc.',
     name: 'getYearlySummary',
     parameters: yearlySummaryParamsSchema,
     execute: async (params) => {
