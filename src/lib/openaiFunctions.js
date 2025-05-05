@@ -668,7 +668,7 @@ export const functionTools = [
     }
   }),
   tool({
-    description: 'Retrieves a summary of earnings (or other metrics like units, royalty_payable) AGGREGATED and GROUPED by YEAR for a specific catalog. Use this ONLY when the user explicitly asks for a yearly breakdown.',
+    description: 'Fetches actual yearly earnings data. This tool MUST be used before answering any questions about maturity, growth trends, evergreen status, or revenue cliffs. NEVER guess trends before calling this.',
     name: 'getYearlySummary',
     parameters: yearlySummaryParamsSchema,
     execute: async (params) => {

@@ -9,7 +9,7 @@ import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown
 import remarkMath from 'remark-math'; // Import remark-math
 import rehypeKatex from 'rehype-katex'; // Import rehype-katex
 import 'katex/dist/katex.min.css'; // Import KaTeX CSS
-import { Paperclip, User, Upload,Bot, FileUp, BarChart2, FileText, Database } from 'lucide-react'; // Import icons
+import { Paperclip, User, Upload, Bot, FileUp, BarChart2, FileText, Database } from 'lucide-react'; // Import icons
 // Import the Supabase client
 import { supabase } from '@/lib/supabaseClient';
 
@@ -21,13 +21,13 @@ const generateCatalogNameFromFile = (file) => {
 
 export const ChatWindow = forwardRef((props, ref) => {
     const { initialMessages = [], catalog = 'default', clientName = 'Selected Catalog', availableCatalogs = [], onFileUpload } = props;
-    
+
     // --- State for Trace Panel Data ---
     const [retrievedContextRows, setRetrievedContextRows] = useState([]);
     const [lastFunctionCall, setLastFunctionCall] = useState(null);
     const [lastFunctionResult, setLastFunctionResult] = useState(null);
     const [activePanelTab, setActivePanelTab] = useState('data');
-    
+
     // --- State for File Upload Tracking ---
     const fileInputRef = useRef(null);
     const chatContainerRef = useRef(null); // Add ref for chat container
@@ -51,7 +51,7 @@ export const ChatWindow = forwardRef((props, ref) => {
             body: {
                 catalog: catalog,
             },
-             // Clear trace panel on new submission
+            // Clear trace panel on new submission
             onNewMessageSend: () => {
                 // We clear these here AND in onFinish for robustness
                 setLastFunctionCall(null);
@@ -59,42 +59,42 @@ export const ChatWindow = forwardRef((props, ref) => {
             },
             // Update Analysis Panel state when the stream finishes
             onFinish: (message) => {
-              console.log("useChat onFinish - final message:", message);
-              
-              // Extract tool calls from the final assistant message
-              if (message.role === 'assistant' && message.toolInvocations && message.toolInvocations.length > 0) {
-                 const calls = message.toolInvocations.map(inv => 
-                    `${inv.toolName}(${JSON.stringify(inv.args, null, 2)})`
-                 ).join('\n');
-                 console.log("Setting lastFunctionCall from onFinish:", calls);
-                 setLastFunctionCall(calls);
-              } else {
-                  // If the last message wasn't an assistant message with tool calls,
-                  // check previous messages (less ideal, but a fallback)
-                  const lastAssistantMsgWithTools = [...messages, message].reverse().find(m => m.role === 'assistant' && m.toolInvocations?.length > 0);
-                  if (lastAssistantMsgWithTools?.toolInvocations) {
-                     const calls = lastAssistantMsgWithTools.toolInvocations.map(inv => 
+                console.log("useChat onFinish - final message:", message);
+
+                // Extract tool calls from the final assistant message
+                if (message.role === 'assistant' && message.toolInvocations && message.toolInvocations.length > 0) {
+                    const calls = message.toolInvocations.map(inv =>
                         `${inv.toolName}(${JSON.stringify(inv.args, null, 2)})`
-                     ).join('\n');
-                     console.log("Setting lastFunctionCall from onFinish (fallback search):", calls);
-                     setLastFunctionCall(calls);
-                  } else {
-                      console.log("No tool calls found in onFinish message or history.");
-                      setLastFunctionCall(null); // Explicitly clear if no tool used
-                  }
-              }
-              
-              // Extract tool results (look for message with role: 'tool')
-              // The result might be in a separate message before the final assistant message
-              const toolResultMessage = [...messages, message].reverse().find(m => m.role === 'tool');
-              if (toolResultMessage?.result) {
-                  const resultString = JSON.stringify(toolResultMessage.result, null, 2);
-                  console.log("Setting lastFunctionResult from onFinish:", resultString);
-                  setLastFunctionResult(resultString);
-              } else {
-                  console.log("No tool result message found in onFinish history.");
-                  setLastFunctionResult(null); // Explicitly clear
-              }
+                    ).join('\n');
+                    console.log("Setting lastFunctionCall from onFinish:", calls);
+                    setLastFunctionCall(calls);
+                } else {
+                    // If the last message wasn't an assistant message with tool calls,
+                    // check previous messages (less ideal, but a fallback)
+                    const lastAssistantMsgWithTools = [...messages, message].reverse().find(m => m.role === 'assistant' && m.toolInvocations?.length > 0);
+                    if (lastAssistantMsgWithTools?.toolInvocations) {
+                        const calls = lastAssistantMsgWithTools.toolInvocations.map(inv =>
+                            `${inv.toolName}(${JSON.stringify(inv.args, null, 2)})`
+                        ).join('\n');
+                        console.log("Setting lastFunctionCall from onFinish (fallback search):", calls);
+                        setLastFunctionCall(calls);
+                    } else {
+                        console.log("No tool calls found in onFinish message or history.");
+                        setLastFunctionCall(null); // Explicitly clear if no tool used
+                    }
+                }
+
+                // Extract tool results (look for message with role: 'tool')
+                // The result might be in a separate message before the final assistant message
+                const toolResultMessage = [...messages, message].reverse().find(m => m.role === 'tool');
+                if (toolResultMessage?.result) {
+                    const resultString = JSON.stringify(toolResultMessage.result, null, 2);
+                    console.log("Setting lastFunctionResult from onFinish:", resultString);
+                    setLastFunctionResult(resultString);
+                } else {
+                    console.log("No tool result message found in onFinish history.");
+                    setLastFunctionResult(null); // Explicitly clear
+                }
             }
         });
 
@@ -156,119 +156,119 @@ export const ChatWindow = forwardRef((props, ref) => {
             setLastUploadSuccess(`${successCount} of ${files.length} files successfully uploaded to catalog \"${batchCatalog}\" and queued for processing.`);
             // Notify parent about the new catalog only if it was an 'upload' tab action and at least one file succeeded
             if (isNewCatalogUpload && onFileUpload) {
-                 onFileUpload(batchCatalog);
+                onFileUpload(batchCatalog);
             }
         }
 
         setIsUploading(false);
         setJobStatus(errorCount > 0 ? 'batch_error' : 'batch_queued'); // Final batch status
 
-         // Clear the file input value so the same files can be selected again if needed
-         if (fileInputRef.current) {
+        // Clear the file input value so the same files can be selected again if needed
+        if (fileInputRef.current) {
             fileInputRef.current.value = "";
-         }
+        }
     };
 
     // Main upload handler - NOW ACCEPTS targetCatalog and returns Promise
     const handleFileUpload = async (file, targetCatalog) => {
-       // Removed internal state updates for isUploading, lastUploadSuccess, lastUploadError
-       // Removed internal logic to determine catalog name
+        // Removed internal state updates for isUploading, lastUploadSuccess, lastUploadError
+        // Removed internal logic to determine catalog name
 
         return new Promise(async (resolve, reject) => {
-             if (!supabase) {
-                 return reject(new Error('Supabase client not available.'));
-             }
-             if (!file) {
-                 return reject(new Error('No file provided to upload function.'));
-             }
-             if (!targetCatalog) {
-                 return reject(new Error('No target catalog determined for upload.'));
-             }
+            if (!supabase) {
+                return reject(new Error('Supabase client not available.'));
+            }
+            if (!file) {
+                return reject(new Error('No file provided to upload function.'));
+            }
+            if (!targetCatalog) {
+                return reject(new Error('No target catalog determined for upload.'));
+            }
 
-             // Individual file state tracking (optional, for detailed progress)
-             // We might need a different way to track this per-file if needed for UI
-             // For now, focus on Promise resolve/reject for batch handling
-             // setJobStatus('initiating_single'); // Example per-file status
-             // setCurrentFileName(file.name);
+            // Individual file state tracking (optional, for detailed progress)
+            // We might need a different way to track this per-file if needed for UI
+            // For now, focus on Promise resolve/reject for batch handling
+            // setJobStatus('initiating_single'); // Example per-file status
+            // setCurrentFileName(file.name);
 
-             let insertedFileId = null;
+            let insertedFileId = null;
 
-             try {
-                 // setJobStatus('pending_db_single');
-                 const fileInsertData = {
-                     name: file.name,
-                     mime_type: file.type || 'application/octet-stream',
-                     catalog: targetCatalog,
-                     doc_type: docType,
-                 };
+            try {
+                // setJobStatus('pending_db_single');
+                const fileInsertData = {
+                    name: file.name,
+                    mime_type: file.type || 'application/octet-stream',
+                    catalog: targetCatalog,
+                    doc_type: docType,
+                };
 
-                 console.log(`Inserting file record for ${file.name} into catalog ${targetCatalog}:`, fileInsertData);
+                console.log(`Inserting file record for ${file.name} into catalog ${targetCatalog}:`, fileInsertData);
 
-                 const { data: fileRecord, error: insertError } = await supabase
-                     .from('files')
-                     .insert(fileInsertData)
-                     .select('id')
-                     .single();
+                const { data: fileRecord, error: insertError } = await supabase
+                    .from('files')
+                    .insert(fileInsertData)
+                    .select('id')
+                    .single();
 
-                 if (insertError) throw new Error(`DB insert failed: ${insertError.message}`);
-                 if (!fileRecord || !fileRecord.id) throw new Error('DB insert failed to return ID.');
+                if (insertError) throw new Error(`DB insert failed: ${insertError.message}`);
+                if (!fileRecord || !fileRecord.id) throw new Error('DB insert failed to return ID.');
 
-                 insertedFileId = fileRecord.id;
-                 console.log(`File record created for ${file.name} with ID: ${insertedFileId}`);
-                 // setJobStatus('requesting_url_single');
+                insertedFileId = fileRecord.id;
+                console.log(`File record created for ${file.name} with ID: ${insertedFileId}`);
+                // setJobStatus('requesting_url_single');
 
-                 const signedUrlResponse = await fetch('/api/storage/signed-url', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ filename: file.name, file_id: insertedFileId }),
-                 });
+                const signedUrlResponse = await fetch('/api/storage/signed-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: file.name, file_id: insertedFileId }),
+                });
 
-                 if (!signedUrlResponse.ok) {
-                     const errorData = await signedUrlResponse.json();
-                     throw new Error(`Signed URL fetch failed: ${errorData.error || signedUrlResponse.statusText}`);
-                 }
+                if (!signedUrlResponse.ok) {
+                    const errorData = await signedUrlResponse.json();
+                    throw new Error(`Signed URL fetch failed: ${errorData.error || signedUrlResponse.statusText}`);
+                }
 
-                 const { signedUrl, path } = await signedUrlResponse.json();
-                 console.log(`Received signed URL for ${file.name}, path: ${path}`);
-                 // setJobStatus('uploading_single');
+                const { signedUrl, path } = await signedUrlResponse.json();
+                console.log(`Received signed URL for ${file.name}, path: ${path}`);
+                // setJobStatus('uploading_single');
 
-                 const uploadResponse = await fetch(signedUrl, {
-                     method: 'PUT',
-                     body: file,
-                     headers: { 'Content-Type': file.type || 'application/octet-stream' },
-                 });
+                const uploadResponse = await fetch(signedUrl, {
+                    method: 'PUT',
+                    body: file,
+                    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+                });
 
-                 if (!uploadResponse.ok) {
-                     let errorDetail = uploadResponse.statusText;
-                     try {
-                         const xmlError = await uploadResponse.text();
-                         console.error(`Direct upload failed response for ${file.name}:`, xmlError);
-                         const messageMatch = xmlError.match(/<Message>(.*?)<\/Message>/);
-                         if (messageMatch && messageMatch[1]) errorDetail = messageMatch[1];
-                     } catch (parseError) { /* Ignore */ }
-                     throw new Error(`Storage upload failed: ${uploadResponse.status} ${errorDetail}`);
-                 }
+                if (!uploadResponse.ok) {
+                    let errorDetail = uploadResponse.statusText;
+                    try {
+                        const xmlError = await uploadResponse.text();
+                        console.error(`Direct upload failed response for ${file.name}:`, xmlError);
+                        const messageMatch = xmlError.match(/<Message>(.*?)<\/Message>/);
+                        if (messageMatch && messageMatch[1]) errorDetail = messageMatch[1];
+                    } catch (parseError) { /* Ignore */ }
+                    throw new Error(`Storage upload failed: ${uploadResponse.status} ${errorDetail}`);
+                }
 
-                 console.log(`File ${file.name} upload complete via UI. Queued for processing.`);
-                 // setJobStatus('queued_single');
-                 resolve({ fileId: insertedFileId, fileName: file.name }); // Resolve on success
+                console.log(`File ${file.name} upload complete via UI. Queued for processing.`);
+                // setJobStatus('queued_single');
+                resolve({ fileId: insertedFileId, fileName: file.name }); // Resolve on success
 
-             } catch (error) {
-                 console.error(`handleFileUpload error for ${file.name}:`, error);
-                 // Attempt to mark the file as error in DB even if part of the process failed
-                 if (insertedFileId) {
-                     try {
-                         console.warn(`Updating file ${insertedFileId} (${file.name}) status to error in DB due to upload failure...`);
-                         await supabase.from('files').update({ status: 'error', error_message: String(error.message || 'Unknown upload error').substring(0, 250) }).eq('id', insertedFileId);
-                     } catch (dbError) {
-                         console.error(`Failed to update file status to error in DB for ${insertedFileId} (${file.name}):`, dbError);
-                     }
-                 }
-                 reject(error); // Reject on error
-             }
-             // No 'finally' block needed here as Promise handles completion
-         });
-       };
+            } catch (error) {
+                console.error(`handleFileUpload error for ${file.name}:`, error);
+                // Attempt to mark the file as error in DB even if part of the process failed
+                if (insertedFileId) {
+                    try {
+                        console.warn(`Updating file ${insertedFileId} (${file.name}) status to error in DB due to upload failure...`);
+                        await supabase.from('files').update({ status: 'error', error_message: String(error.message || 'Unknown upload error').substring(0, 250) }).eq('id', insertedFileId);
+                    } catch (dbError) {
+                        console.error(`Failed to update file status to error in DB for ${insertedFileId} (${file.name}):`, dbError);
+                    }
+                }
+                reject(error); // Reject on error
+            }
+            // No 'finally' block needed here as Promise handles completion
+        });
+    };
 
     // Expose data for export using useChat state
     useImperativeHandle(ref, () => ({
@@ -284,8 +284,8 @@ export const ChatWindow = forwardRef((props, ref) => {
     useEffect(() => {
         if (messages.length === initialMessages.length) {
             // Clear here too if messages are externally reset
-             setLastFunctionCall(null);
-             setLastFunctionResult(null);
+            setLastFunctionCall(null);
+            setLastFunctionResult(null);
         }
     }, [messages, initialMessages]);
 
@@ -315,7 +315,7 @@ export const ChatWindow = forwardRef((props, ref) => {
             // Use setTimeout to ensure scrolling happens after DOM update
             const timer = setTimeout(() => {
                 if (chatContainerRef.current) { // Check again inside timeout
-                   chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
                 }
             }, 0); // Minimal delay
             return () => clearTimeout(timer); // Cleanup timeout on unmount/re-run
@@ -323,16 +323,16 @@ export const ChatWindow = forwardRef((props, ref) => {
     }, [messages]);
 
     return (
-        <div className="flex h-[500px]">
+        <div className="flex h-[500px] ">
             {/* Chat Area */}
-            <div className="flex flex-col w-2/3 border rounded-lg mr-4 overflow-hidden bg-white">
+            <div className="flex shadow-sm flex-col w-2/3 border rounded-lg mr-4 overflow-hidden bg-white">
                 {/* Conditional Rendering: Show Chat or Upload Prompt */}
                 {!catalog ? (
                     <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                         <Database size={40} className="text-gray-400 mb-4" />
                         <h3 className="text-lg font-medium text-gray-700 mb-2">No Catalog Selected</h3>
                         <p className="text-sm text-gray-500 mb-4">Upload a data file to create a new catalog or select an existing one.</p>
-                        <Button 
+                        <Button
                             onClick={() => {
                                 setActivePanelTab('upload'); // Switch to upload tab for initial upload
                                 setTimeout(() => fileInputRef.current?.click(), 50); // Give state time to update before click
@@ -343,15 +343,15 @@ export const ChatWindow = forwardRef((props, ref) => {
                             <FileUp size={16} className="mr-2" /> Upload New Data File
                         </Button>
                         {/* Hidden file input remains */}
-                        <input 
-                           type="file" 
-                           ref={fileInputRef} 
-                           onChange={handleFileChange} 
-                           style={{ display: 'none' }} 
-                           multiple 
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            style={{ display: 'none' }}
+                            multiple
                         />
                         {/* Display BATCH upload status */}
-                         {isUploading && (
+                        {isUploading && (
                             <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                                 <span>Uploading {totalCount} files...</span>
@@ -362,101 +362,100 @@ export const ChatWindow = forwardRef((props, ref) => {
                         {lastUploadSuccess && <div className="mt-4 text-sm text-green-500">{lastUploadSuccess}</div>}
                     </div>
                 ) : (
-                    <> 
+                    <>
                         {/* Original Chat Content Area */}
                         <div ref={chatContainerRef} className="flex-grow overflow-y-auto p-6 space-y-6 h-[400px]">
-                           {/* ... messages.map logic ... */} 
-                    {messages.map((msg) => (
+                            {/* ... messages.map logic ... */}
+                            {messages.map((msg) => (
                                 <div key={msg.id} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     {/* Simple Avatar Placeholder */}
-                                    {msg.role !== 'user' && (
+                                    {/* {msg.role !== 'user' && (
                                         <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white shrink-0">
                                             <Bot size={18} />
                                         </div>
-                                    )}
+                                    )} */}
                                     {/* Message Bubble */}
                                     <div
-                                        className={`rounded-md px-4 py-2.5 max-w-[80%] ${ 
-                                            msg.role === 'user' 
-                                                ? 'bg-gray-800 text-white'
-                                                : 'bg-gray-100 text-black'
-                                }`}
+                                        className={`rounded-2xl px-4 py-2.5 max-w-[80%] ${msg.role === 'user'
+                                                ? 'bg-gray-100 text-black'
+                                                : ' text-black'
+                                            }`}
                                     >
                                         {msg.role === 'user' ? (
                                             <span className="whitespace-pre-wrap">{msg.content}</span>
                                         ) : (
                                             // Apply prose styling to a wrapper div
                                             <div className="prose prose-sm max-w-none">
-                                                <ReactMarkdown 
+                                                <ReactMarkdown
                                                     remarkPlugins={[remarkMath]}
                                                     rehypePlugins={[rehypeKatex]}
-                            >
-                                {msg.content}
-                                                </ReactMarkdown> 
+                                                >
+                                                    {msg.content}
+                                                </ReactMarkdown>
                                             </div>
                                         )}
                                     </div>
                                     {/* Simple Avatar Placeholder */}
-                                    {msg.role === 'user' && (
+                                    {/* {msg.role === 'user' && (
                                         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0">
                                             <User size={18} />
-                            </div>
-                                    )}
-                        </div>
-                    ))}
-                            {/* ... isLoading and error display ... */} 
-                    {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+                                        </div>
+                                    )} */}
+                                </div>
+                            ))}
+                            {/* ... isLoading and error display ... */}
+                            {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
                                 <div className="flex justify-center text-gray-500">
                                     <div className="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white shrink-0 mr-3">
                                         <Bot size={18} />
                                     </div>
                                     <span>Thinking...</span>
                                 </div>
-                    )}
-                    {error && (
-                         <div className="text-center text-red-500 p-2 rounded bg-red-100 border border-red-300">
-                            Error: {error.message}
+                            )}
+                            {error && (
+                                <div className="text-center text-red-500 p-2 rounded bg-red-100 border border-red-300">
+                                    Error: {error.message}
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
                         {/* Chat Input Form */}
-                <form 
-                    onSubmit={(e) => {
+                        <form
+                            onSubmit={(e) => {
                                 handleSubmit(e, { body: { catalog: catalog, client_name: clientName } });
-                    }}
+                            }}
                             className="p-4 border-t bg-white flex items-center space-x-2 shrink-0"
-                 >
+                        >
                             {/* Button to trigger the SAME file input used by the empty state */}
-                            <Button 
-                                type="button" 
+                            <Button
+                                type="button"
                                 onClick={() => {
-                                     // Default attachment button should add to current catalog
-                                     setActivePanelTab('data');
-                                     setTimeout(() => fileInputRef.current?.click(), 50);
-                                 }}
-                                variant="outline" 
-                                className="h-10 w-10 p-2"
+                                    // Default attachment button should add to current catalog
+                                    setActivePanelTab('data');
+                                    setTimeout(() => fileInputRef.current?.click(), 50);
+                                }}
+                                variant="outline"
+                                className="h-10 w-10 p-2 "
                                 title="Add file to current catalog"
                             >
                                 <FileUp size={18} />
                             </Button>
-                             {/* Hidden file input */}
-                             <input 
-                                type="file" 
-                                ref={fileInputRef} 
-                                onChange={handleFileChange} 
-                                style={{ display: 'none' }} 
-                                multiple 
-                             />
-                    <Input
-                        value={input}
+                            {/* Hidden file input */}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                style={{ display: 'none' }}
+                                multiple
+                            />
+                            <Input
+                                value={input}
                                 onChange={handleInputChange}
-                        placeholder="Ask a valuation question..."
-                        disabled={isLoading}
-                                className="flex-grow bg-gray-50 border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                                placeholder="Ask a valuation question..."
+                                disabled={isLoading}
+                                className=" shadow-sm flex-grow bg-gray-50 border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            />
                             <Button type="submit" disabled={isLoading || !input.trim()} className="bg-gray-800 hover:bg-gray-700 text-white">Send</Button>
-                </form>
+                        </form>
                     </>
                 )}
             </div>
@@ -465,7 +464,7 @@ export const ChatWindow = forwardRef((props, ref) => {
             <div className="w-1/3 h-full flex flex-col">
                 {/* Tab navigation */}
                 <div className="flex border-b">
-                    {/* Removed Analysis/Context tabs for now */} 
+                    {/* Removed Analysis/Context tabs for now */}
                     <button
                         className={`px-4 py-2 text-sm font-medium ${activePanelTab === 'data' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
                         onClick={() => setActivePanelTab('data')}
@@ -482,9 +481,9 @@ export const ChatWindow = forwardRef((props, ref) => {
 
                 {/* Panel content */}
                 <div className="flex-grow overflow-y-auto p-4 bg-gray-50 rounded-b-lg">
-                    
 
-                   
+
+
 
                     {activePanelTab === 'data' && (
                         <div className="space-y-4">
@@ -497,14 +496,14 @@ export const ChatWindow = forwardRef((props, ref) => {
                                 </div>
                             </div>
 
-                            {/* Upload interface for adding to current catalog */} 
+                            {/* Upload interface for adding to current catalog */}
                             <div className="bg-white border rounded-lg p-4">
                                 <h3 className="text-sm font-medium mb-3">Add Data to '{clientName || catalog || 'N/A'}'</h3>
-                                {/* File type selector (kept static for now) */} 
+                                {/* File type selector (kept static for now) */}
                                 <div className="space-y-2 mb-4">
                                     <span className="text-xs font-medium">File Type</span>
                                     <div className="flex flex-wrap gap-2">
-                                        {/* Add onClick handlers here later if needed */} 
+                                        {/* Add onClick handlers here later if needed */}
                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'evaluation' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('evaluation')}>
                                             Financial Statements
                                         </span>
@@ -516,7 +515,7 @@ export const ChatWindow = forwardRef((props, ref) => {
                                         </span>
                                     </div>
                                 </div>
-                                {/* Dropzone for 'data' tab */} 
+                                {/* Dropzone for 'data' tab */}
                                 <div
                                     className="border-2 border-dashed rounded-md p-6 text-center border-gray-300 cursor-pointer hover:border-blue-400"
                                     onClick={() => fileInputRef.current?.click()}
@@ -531,10 +530,10 @@ export const ChatWindow = forwardRef((props, ref) => {
                                 </div>
                                 {/* Shared BATCH Upload Status Display */}
                                 {isUploading && (
-                                   <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
-                                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                                       <span>Uploading {totalCount} files...</span>
-                                   </div>
+                                    <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                        <span>Uploading {totalCount} files...</span>
+                                    </div>
                                 )}
                                 {lastUploadError && <div className="mt-4 text-sm text-red-500">Error: {lastUploadError}</div>}
                                 {lastUploadSuccess && <div className="mt-4 text-sm text-green-500">{lastUploadSuccess}</div>}
@@ -543,29 +542,29 @@ export const ChatWindow = forwardRef((props, ref) => {
                     )}
                     {activePanelTab === 'upload' && (
                         <div className="space-y-4">
-                            {/* No "Current Data Source" needed here */} 
+                            {/* No "Current Data Source" needed here */}
                             <div className="bg-white border rounded-lg p-4">
                                 <h3 className="text-sm font-medium mb-3">Upload New Files as Catalog</h3>
                                 <p className="text-xs text-gray-500 mb-3">
                                     Upload one or more files. The first file's name will determine the new catalog name.
                                 </p>
-                                {/* File type selector (kept static for now) */} 
+                                {/* File type selector (kept static for now) */}
                                 <div className="space-y-2 mb-4">
-                                     <span className="text-xs font-medium">File Type</span>
-                                     <div className="flex flex-wrap gap-2">
-                                         {/* Add onClick handlers here later if needed */} 
-                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'evaluation' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('evaluation')}>
-                                             Financial Statements
-                                         </span>
-                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'royalty' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('royalty')}>
-                                             Royalty Reports
-                                         </span>
-                                         <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'custom' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('custom')}>
-                                             Custom Data
-                                         </span>
-                                     </div>
-                                 </div>
-                                {/* Dropzone for 'upload' tab */} 
+                                    <span className="text-xs font-medium">File Type</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Add onClick handlers here later if needed */}
+                                        <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'evaluation' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('evaluation')}>
+                                            Financial Statements
+                                        </span>
+                                        <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'royalty' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('royalty')}>
+                                            Royalty Reports
+                                        </span>
+                                        <span className={`px-2 py-1 text-xs rounded cursor-pointer ${docType === 'custom' ? 'bg-blue-500 text-white' : 'border border-gray-300'}`} onClick={() => setDocType('custom')}>
+                                            Custom Data
+                                        </span>
+                                    </div>
+                                </div>
+                                {/* Dropzone for 'upload' tab */}
                                 <div
                                     className="border-2 border-dashed rounded-md p-6 text-center border-gray-300 cursor-pointer hover:border-blue-400"
                                     onClick={() => fileInputRef.current?.click()}
@@ -579,14 +578,14 @@ export const ChatWindow = forwardRef((props, ref) => {
                                     </div>
                                 </div>
                                 {/* Shared BATCH Upload Status Display */}
-                                 {isUploading && (
+                                {isUploading && (
                                     <div className="mt-4 text-sm text-gray-600 flex items-center space-x-2">
                                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                                         <span>Uploading {totalCount} files...</span>
                                     </div>
-                                 )}
-                                 {lastUploadError && <div className="mt-4 text-sm text-red-500">Error: {lastUploadError}</div>}
-                                 {lastUploadSuccess && <div className="mt-4 text-sm text-green-500">{lastUploadSuccess}</div>}
+                                )}
+                                {lastUploadError && <div className="mt-4 text-sm text-red-500">Error: {lastUploadError}</div>}
+                                {lastUploadSuccess && <div className="mt-4 text-sm text-green-500">{lastUploadSuccess}</div>}
                             </div>
                         </div>
                     )}

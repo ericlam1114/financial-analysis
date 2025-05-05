@@ -3,8 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai"; // Import streamText from the ai package
 import { embed } from "ai"; // Import embed from the ai package
-import { calculateMetricSummary } from "@/lib/openaiFunctions.js"; // Import backend functions directly
-import { functionTools } from "@/lib/openaiFunctions.js";
+import { functionTools, getYearlySummary } from "@/lib/openaiFunctions.js"; // Import getYearlySummary too
 // Embeddings will also use the Vercel adapter implicitly or via a separate call if needed
 
 // IMPORTANT: Set the runtime to edge
@@ -16,7 +15,7 @@ export const runtime = 'edge';
 // });
 
 // Create specific model instances directly from the imported provider function
-const chatModel = openai('gpt-4.1');
+const chatModel = openai('ft:gpt-4o-mini-2024-07-18:personal:music-catalog-valuation-v2-jsonl:BTX7QCKs');
 const embeddingModel = openai.embedding('text-embedding-3-small'); // Use the correct method on the provider function
 
 // Initialize Supabase client (use SERVICE key for server-side access)
@@ -51,31 +50,54 @@ export async function POST(req) {
         logEntry.user_prompt = userPrompt;
 
         if (!userPrompt) {
-            return new Response(JSON.stringify({ error: 'Missing message content' }), { status: 400 });
+            return Response.json({ error: 'Missing message content' }, { status: 400 });
         }
         console.log(`API Route: Received message for catalog '${catalog || "N/A"}':`, userPrompt);
 
-        // *** USE THE NEW SYSTEM PROMPT ***
-        const systemPrompt = `You are a proactive financial analyst assistant specialized in music royalty data for the catalog: ${catalog || 'unknown'} (${client_name || 'unknown'}).
+        let history = messages.map((msg) => ({ role: msg.role, content: msg.content }));
 
-You have access to tools that retrieve earnings, top songs, and metric summaries across any year, quarter, or month.
+        // *** Define the base system prompt ***
+        let systemPrompt = `You are a proactive financial analyst assistant specialized in music royalty data.
+The current catalog context is '${catalog || 'unknown'} (${client_name || 'unknown'}). Assume this context unless the user explicitly specifies a different catalog.
 
 Your behavior rules:
-1. Always take initiative: if the user asks a question that requires data you can fetch (e.g., earnings, growth, summaries), **use the tools immediately** without asking for permission.
-2. If data is missing (e.g., growth rate), calculate it from available history (e.g., use past years to derive an average).
-3. If the period isn't specified, assume the broadest reasonable scope (e.g., fetch all years and derive what's needed).
-4. Clearly format your response, using:
-   - **bold** for key numbers
-   - bullet points for clarity
-   - simple math in plain language (avoid LaTeX or special math syntax)
+1.  **Prioritize Complete Aggregation**: For questions about trends, summaries, totals, or averages across time, use summary/aggregation tools (like \`calculateMetricSummary\`). **Crucially, when asked about a specific year, prioritize fetching the complete total for that *entire year*.** Avoid summing partial data (like available months or quarters) if a full-year summary is available or can be computed by a tool. If only partial data exists for the most recent period (e.g., Year-to-Date), clearly state this (e.g., "Earnings for 2024 YTD are **$X**.").
+2.  **Proactive & Silent Tool Use**: If a user query requires data you can fetch (earnings, growth, summaries, top items, valuations), **use the appropriate tool immediately without asking permission**. Integrate the tool's results directly into your response. **Do not say "I used a tool" or describe the tool process.** Only state the result (e.g., "Total earnings were **$X**").
+3.  **Fact-Based Responses**: Only state specific totals, top earners (songs, sources, periods), or calculated values if a tool provided that exact information. If asked for something like "top 5 songs" and the relevant tool wasn't called or returned no results, state that you need to fetch the data (e.g., "I need to check the data to find the top songs for that period.") and then attempt to use the appropriate tool. Do not present conflicting data from different tool calls without explaining the discrepancy (e.g., partial vs. full period).
+4.  **Default to Broad Scope**: If the user doesn't specify a date range or period, default to analyzing the **most complete available data range** for the current catalog. Only narrow the scope if the user explicitly asks for a specific year, quarter, or month.
+5.  **Avoid Guessing**: If retrieved context is insufficient, call an appropriate aggregation tool instead of guessing.
+6.  **Calculate Missing Data**: If derived data (like growth rates) are needed, calculate them from historical data fetched by tools. Explain simple calculations clearly.
+7.  **Format Results Cleanly**: Present numerical results clearly using **bold markdown** for key numbers/labels and bullet points for lists/breakdowns.
+8.  **Handle Missing Info/Failures**: Never say "I don't know." If a tool fails or returns no data, provide a helpful message: "I tried retrieving the data for [catalog/period] but didn't find any results. You could try a different period, check the catalog name, or rephrase your request."
+9.  **NEVER Fabricate Data**: Do NOT invent numerical trends or summaries. Never describe earnings behavior (e.g., "this catalog is evergreen" or "growth is accelerating") until *after* you have fetched actual data using \`getYearlySummary\`. All numerical conclusions must be grounded in tool output.
+10. **Execute Multi-Step Analysis**: For analytical questions requiring multiple pieces of data (e.g., assessing sustainability by checking sources, income types, and history), you MUST execute the necessary tool calls sequentially (e.g., call \`getTopSources\`, then \`getTopIncomeTypes\`, etc.) and integrate *all* results before providing your final analysis. Do not just state your plan; execute it fully.
 
-If a tool fails or returns no results, state that clearly and explain what the user can do next.
+Remember: Accuracy is paramount. Prioritize complete data periods, use tools proactively, and present facts clearly based *only* on the information retrieved by your tools.`;
 
-You are expected to *answer the user's intent*, not just their literal words. Use judgment and be helpful.`;
-        
+        // --- Safeguard: Pre-fetch yearly summary if keywords are present ---
+        const lowerCasePrompt = userPrompt.toLowerCase();
+        let preFetchedData = null;
+        if (catalog && (lowerCasePrompt.includes("growth") || lowerCasePrompt.includes("evergreen"))) {
+            console.log("Keywords 'growth' or 'evergreen' detected. Pre-fetching yearly summary for catalog:", catalog);
+            try {
+                const summaryResult = await getYearlySummary({ catalog_filter: catalog }); // Default metric 'amount_collected' is fine here
+                if (summaryResult.success && summaryResult.result) {
+                    console.log("Pre-fetched yearly summary data:", summaryResult.result);
+                    preFetchedData = summaryResult.result; // Store for logging if needed
+                    // *** Inject pre-fetched data into the system prompt for this call ***
+                    systemPrompt += `\n\nIMPORTANT CONTEXT: The yearly summary for catalog ${catalog} has been pre-fetched. Use this data directly for assessing growth/maturity:\n${JSON.stringify(preFetchedData, null, 2)}`;
+                } else {
+                    console.warn("Pre-fetching yearly summary failed or returned no data:", summaryResult.error);
+                     // Optionally inform the model about the failure? Or let it try again?
+                }
+            } catch (fetchError) {
+                console.error("Error during pre-fetching yearly summary:", fetchError);
+                // Log and proceed without pre-fetched data
+            }
+        }
+        // --- End Safeguard ---
+
         console.log("System Prompt:", systemPrompt);
-
-        const history = messages.map((msg) => ({ role: msg.role, content: msg.content }));
 
         // Single streamText call with maxSteps > 1
         const result = await streamText({
@@ -83,12 +105,16 @@ You are expected to *answer the user's intent*, not just their literal words. Us
             system: systemPrompt,
             messages: history,
             tools: functionTools,
-            maxSteps: 5,
+            maxSteps: 10,
             async onFinish({ usage, finishReason, toolCalls, toolResults }) {
                 // Log tool usage if any calls were made
                 if (toolCalls && toolCalls.length > 0) {
                     logEntry.fn_called = toolCalls.map(tc => `${tc.toolName}(${JSON.stringify(tc.args)})`).join(', ');
                     logEntry.retrieved_data = JSON.stringify(toolResults);
+                } else if (preFetchedData) {
+                    // Log the pre-fetched data if no other tools were called
+                    logEntry.fn_called = 'getYearlySummary (pre-fetched)';
+                    logEntry.retrieved_data = JSON.stringify(preFetchedData);
                 }
                 logEntry.latency_ms = Date.now() - startTime;
                 logEntry.total_tokens = usage?.totalTokens;
@@ -109,32 +135,4 @@ You are expected to *answer the user's intent*, not just their literal words. Us
     }
 }
 
-// Handle aggregate query with metadata functions
-const handleAggregateQuery = async (params) => {
-    console.log("Handling aggregate query...");
-    console.log("Extracted Params:", params);
-
-    try {
-        // Call the appropriate function based on the type of query
-        const aggregateResult = await calculateMetricSummary(params);
-        console.log("Aggregate data retrieved:", aggregateResult);
-
-        if (!aggregateResult.success) {
-            console.log("Aggregate query failed:", aggregateResult.error);
-            // If there was an error, pass that to the LLM
-            const systemPrompt = `I encountered an issue while calculating the aggregate data: ${aggregateResult.error}. Please inform the user about this problem.`;
-            return generateChatResponse(systemPrompt, {});
-        }
-
-        // Pass the actual aggregate data to the LLM for formatting the response
-        const systemPrompt = `You have calculated the following aggregate data for the **${selectedCatalog}** catalog based on the user's request. Please present this information clearly using bullet points. Ensure key numerical values (like totals, averages) are emphasized using **markdown bolding**. Use only the data provided below.
-Data:
-${JSON.stringify(aggregateResult, null, 2)}`;
-
-        return generateChatResponse(systemPrompt, {});
-    } catch (error) {
-        console.error("Error in handleAggregateQuery:", error);
-        const systemPrompt = `I encountered an error while trying to calculate the aggregate data: ${error.message}. Please try again or contact support if the issue persists.`;
-        return generateChatResponse(systemPrompt, {});
-    }
-};
+// Removed handleAggregateQuery as logic is now integrated or handled by tools/streamText

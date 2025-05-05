@@ -70,7 +70,7 @@ export default function UploadPage() {
         supabase.removeChannel(channel).catch(err => console.error('Error removing channel:', err));
       }
     };
-  }, [supabase, activeJobId, currentFileName]);
+  }, []);
 
   const handleFileUpload = async (file) => {
     if (!supabase) {

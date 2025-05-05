@@ -30,7 +30,7 @@ export function FileDrop({ onFileDrop }) {
       {
         isDragActive ?
           <p>Drop the file here ...</p> :
-          <p>Drag 'n' drop a CSV, XLSX, or PDF file here, or click to select</p>
+          <p>Drag &apos;n&apos; drop a CSV, XLSX, or PDF file here, or click to select</p>
       }
     </div>
   );
