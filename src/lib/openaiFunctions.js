@@ -691,7 +691,7 @@ export const functionTools = [
     }
   }),
   tool({
-    description: 'Fetches actual yearly earnings data, summarizing the amount_collected metric by default. Use this specific metric for general "earnings" or "revenue" questions unless the user explicitly asks for a different metric (e.g., "net payable", "units"). This tool MUST be used before answering any questions about maturity, growth trends, evergreen status, or revenue cliffs. NEVER guess trends before calling this. Reports results with period context (FullYear, YTD, PartialYear).',
+    description: 'Fetches yearly financial summary data (specifically \'amount_collected\' unless another metric is requested) and provides period context. **Crucially, use the exact \'total_sum\' value and explicitly state the \'period_type\' (FullYear, YTD, PartialYear) returned by this tool in your response.** This tool MUST be used before answering any questions about maturity, growth trends, evergreen status, or revenue cliffs.',
     name: 'getYearlySummary',
     parameters: yearlySummaryParamsSchema,
     execute: async (params) => {
