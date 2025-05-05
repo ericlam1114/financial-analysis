@@ -498,7 +498,7 @@ export const ChatWindow = forwardRef((props, ref) => {
 
                             {/* Upload interface for adding to current catalog */}
                             <div className="bg-white border rounded-lg p-4">
-                                <h3 className="text-sm font-medium mb-3">Add Data to '{clientName || catalog || 'N/A'}'</h3>
+                                <h3 className="text-sm font-medium mb-3">Add Data to &apos;{clientName || catalog || 'N/A'}&apos;</h3>
                                 {/* File type selector (kept static for now) */}
                                 <div className="space-y-2 mb-4">
                                     <span className="text-xs font-medium">File Type</span>
@@ -546,7 +546,7 @@ export const ChatWindow = forwardRef((props, ref) => {
                             <div className="bg-white border rounded-lg p-4">
                                 <h3 className="text-sm font-medium mb-3">Upload New Files as Catalog</h3>
                                 <p className="text-xs text-gray-500 mb-3">
-                                    Upload one or more files. The first file's name will determine the new catalog name.
+                                    Upload one or more files. The first file&apos;s name will determine the new catalog name.
                                 </p>
                                 {/* File type selector (kept static for now) */}
                                 <div className="space-y-2 mb-4">
