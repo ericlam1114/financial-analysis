@@ -15,7 +15,7 @@ export const runtime = 'edge';
 // });
 
 // Create specific model instances directly from the imported provider function
-const chatModel = openai('ft:gpt-4o-mini-2024-07-18:personal:music-catalog-valuation-v2-jsonl:BTX7QCKs');
+const chatModel = openai('ft:gpt-4o-mini-2024-07-18:personal:music-catalog-valuation-v4-jsonl:BTyRiC9l');
 const embeddingModel = openai.embedding('text-embedding-3-small'); // Use the correct method on the provider function
 
 // Initialize Supabase client (use SERVICE key for server-side access)
