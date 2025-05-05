@@ -691,12 +691,16 @@ export const functionTools = [
     }
   }),
   tool({
-    description: 'Fetches actual yearly earnings data. This tool MUST be used before answering any questions about maturity, growth trends, evergreen status, or revenue cliffs. NEVER guess trends before calling this.',
+    description: 'Fetches actual yearly earnings data, summarizing the amount_collected metric by default. Use this specific metric for general "earnings" or "revenue" questions unless the user explicitly asks for a different metric (e.g., "net payable", "units"). This tool MUST be used before answering any questions about maturity, growth trends, evergreen status, or revenue cliffs. NEVER guess trends before calling this. Reports results with period context (FullYear, YTD, PartialYear).',
     name: 'getYearlySummary',
     parameters: yearlySummaryParamsSchema,
     execute: async (params) => {
+     // Add logging here to see the actual params received
+     console.log("Executing getYearlySummary with params:", params);
      const result = await getYearlySummary(params);
       if (!result.success) throw new Error(result.error || 'Failed to get yearly summary.');
+      // Add logging for the result returned
+      console.log("getYearlySummary result:", result.result);
       return result.result;
     }
   }),
