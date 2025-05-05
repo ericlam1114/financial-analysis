@@ -381,7 +381,30 @@ export async function getYearlySummary(params) {
             return { success: false, error: error.message };
         }
         console.log("Yearly Summary RPC result:", data);
-        const result = data?.map(y => ({ ...y, total_sum: parseFloat(Number(y.total_sum || 0).toFixed(2)) })) || [];
+        
+        const currentYear = new Date().getFullYear();
+        const currentDateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+        const result = data?.map(y => {
+            const year = y.year; // Assuming the RPC result has a 'year' field
+            const isCurrentYear = year === currentYear;
+            const period_type = isCurrentYear ? 'YTD' : 'FullYear';
+            const start_date = `${year}-01-01`;
+            // For simplicity, use current date as end for YTD, otherwise year-end
+            const end_date = isCurrentYear ? currentDateStr : `${year}-12-31`; 
+            
+            return { 
+                ...y, 
+                total_sum: parseFloat(Number(y.total_sum || 0).toFixed(2)),
+                period_type: period_type,
+                start_date: start_date,
+                end_date: end_date,
+                // Ensure year is included if not already part of 'y' spread
+                year: year 
+            };
+        }) || [];
+        
+        console.log("Processed Yearly Summary:", result);
         return { success: true, result: result };
 
     } catch (error) {
