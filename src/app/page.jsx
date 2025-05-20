@@ -115,7 +115,7 @@ export default function DashboardPage() {
              <SelectTrigger id="catalog-select" className="w-full">
                <SelectValue placeholder={isLoadingCatalogs ? "Loading..." : (availableCatalogs.length === 0 ? "No catalogs found" : "Select a catalog")} >
                   {selectedCatalog 
-                    ? availableCatalogs.find(c => c.catalog === selectedCatalog)?.client_name + ' - ' + selectedCatalog
+                    ? availableCatalogs.find(c => c.catalog === selectedCatalog) + ' - ' + selectedCatalog
                     : (isLoadingCatalogs ? "Loading..." : (availableCatalogs.length === 0 ? "No catalogs found" : "Select a catalog"))}
                </SelectValue>
              </SelectTrigger>
