@@ -11,6 +11,24 @@ Next.js 14 web app that ingests music catalog royalty data (CSV, XLSX, PDF) and 
 *   **Math:** mathjs
 *   **Parsing:** papaparse, exceljs, pdf-parse
 
+## Required API Keys and Environment Variables
+
+You'll need to set up the following environment variables to run the application:
+
+```
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Note:
+- The SUPABASE_SERVICE_ROLE_KEY is required for server-side operations like file processing and database writes
+- You must use an OpenAI API key with access to the fine-tuned GPT-4o model referenced in the app
+
 ## Setup
 
 1.  **Clone the repository:**
@@ -41,16 +59,44 @@ Next.js 14 web app that ingests music catalog royalty data (CSV, XLSX, PDF) and 
           created_at timestamptz default now()
         );
         ```
+    *   Create the `files` table for tracking uploaded files:
+        ```sql
+        create table files (
+          id bigserial primary key,
+          name text not null,
+          mime_type text,
+          catalog text not null,
+          doc_type text,
+          status text default 'pending',
+          error_message text,
+          created_at timestamptz default now(),
+          updated_at timestamptz default now()
+        );
+        ```
     *   Create the `match_rows` RPC function (see `src/lib/rag/query.js` for the SQL).
     *   Create a Supabase Storage bucket (e.g., `royalty-files`). Make sure bucket policies allow uploads (and potentially reads) as needed.
-    *   (Optional) Set up a `prompt_log` table if desired.
+    *   (Optional) Set up a `prompt_log` table for tracking AI interactions:
+        ```sql
+        create table prompt_log (
+          id bigserial primary key,
+          user_prompt text,
+          rows_used jsonb,
+          fn_called text,
+          retrieved_data jsonb,
+          total_tokens integer,
+          latency_ms integer,
+          error text,
+          finish_reason text,
+          created_at timestamptz default now()
+        );
+        ```
 
 4.  **Set up Environment Variables:**
-    *   Copy `.env.example` to `.env.local`:
+    *   Rename the example environment file to create your local environment file:
         ```bash
-        cp .env.example .env.local
+        mv example.env. .env.local
         ```
-    *   Fill in your Supabase Project URL, Anon Key, and OpenAI API Key in `.env.local`.
+    *   Add your API keys and configuration values to the `.env.local` file as described in the "Required API Keys" section.
 
 5.  **Install Supabase CLI (if deploying Edge Functions):**
     Follow instructions: [Supabase CLI Docs](https://supabase.com/docs/guides/cli)
@@ -61,11 +107,27 @@ Next.js 14 web app that ingests music catalog royalty data (CSV, XLSX, PDF) and 
 
 ## Running Locally
 
+To start the development server:
+
 ```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### Uploading Files
+
+The application supports:
+1. Uploading single or multiple files at once
+2. Creating new catalogs from uploaded files
+3. Adding files to existing catalogs
+
+Files can be up to 10MB each and the following formats are supported:
+- Excel (.xlsx, .xls)
+- CSV (.csv)
+- PDF (.pdf)
+
+Large royalty reports (100k+ rows) are supported but may take time to process.
 
 ## Deployment
 
