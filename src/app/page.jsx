@@ -152,7 +152,7 @@ export default function DashboardPage() {
                 {
                   id: 'welcome',
                   role: 'assistant',
-                  content: `Ready to answer questions about the **${availableCatalogs.find(c => c.catalog === selectedCatalog)?.client_name || selectedCatalog}** catalog.`,
+                  content: `Ready to answer questions about the **${availableCatalogs.find(c => c.catalog === selectedCatalog) || selectedCatalog}** catalog.`,
                 },
               ] : []} // Pass welcome message only if catalog selected
            />
