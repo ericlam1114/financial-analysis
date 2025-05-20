@@ -115,7 +115,7 @@ export default function DashboardPage() {
              <SelectTrigger id="catalog-select" className="w-full">
                <SelectValue placeholder={isLoadingCatalogs ? "Loading..." : (availableCatalogs.length === 0 ? "No catalogs found" : "Select a catalog")} >
                   {selectedCatalog 
-                    ? availableCatalogs.find(c => c.catalog === selectedCatalog) + ' - ' + selectedCatalog
+                    ? availableCatalogs.find(c => c.catalog === selectedCatalog)?.client_name + ' - ' + selectedCatalog
                     : (isLoadingCatalogs ? "Loading..." : (availableCatalogs.length === 0 ? "No catalogs found" : "Select a catalog"))}
                </SelectValue>
              </SelectTrigger>
@@ -152,7 +152,7 @@ export default function DashboardPage() {
                 {
                   id: 'welcome',
                   role: 'assistant',
-                  content: `Ready to answer questions about the **${availableCatalogs.find(c => c.catalog === selectedCatalog) || selectedCatalog}** catalog.`,
+                  content: `Ready to answer questions about the **${availableCatalogs.find(c => c.catalog === selectedCatalog)?.client_name || selectedCatalog}** catalog.`,
                 },
               ] : []} // Pass welcome message only if catalog selected
            />
